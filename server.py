@@ -124,7 +124,20 @@ async def simulate_pp_detail(
         description="Code vendeur Cetelem (1001989870 par défaut).",
     ),
 ) -> dict[str, Any]:
-    """Retourne l’offre détaillée d’un prêt personnel pour un montant et une durée précis."""
+    """Retourne l’offre détaillée d’un prêt personnel pour un montant et une durée précis.
+
+    Projets disponibles pour material_code : 115 travaux éco-responsables ;
+    330 décoration ; 501 véhicule essence/diesel/autre neuf ;
+    502 véhicule essence/diesel/autre occasion ; 509 véhicule électrique neuf ;
+    510 véhicule électrique occasion ; 520 caravane/camping-car neuf ;
+    521 caravane/camping-car occasion ; 530 hybride rechargeable neuf ;
+    531 hybride rechargeable occasion ; 660 vacances et loisirs ;
+    676 événements de vie ; 680 santé et bien-être ; 919 autres travaux.
+    Le code 810 correspond aux imprévus ; le test à 72 mois a été refusé
+    car la durée dépasse la limite de ce projet. Les noms de projets peuvent
+    être fournis à la place des codes. Les résultats dépendent du montant et
+    de la durée sélectionnés.
+    """
     payload = {
         "materialCode": resolve_material_code(material_code),
         "simulations": {
