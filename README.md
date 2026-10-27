@@ -58,11 +58,15 @@ $env:MCP_TRANSPORT="stdio"
 python server.py
 ```
 
-## Brancher à ChatGPT
+## Déploiement Render pour ChatGPT Web
 
-ChatGPT doit joindre un endpoint MCP Streamable HTTP public en HTTPS. Déployez le serveur sur un hébergeur Python ou avec Docker, configurez `CETELEM_API_KEY` comme secret d’environnement et ajoutez l’URL publique finissant par `/mcp` à une app/serveur MCP personnalisé dans ChatGPT Web. Utilisez **Scan Tools** pour découvrir `cetelem_simulate`. La création d’apps personnalisées dépend de l’offre et des paramètres du compte ou de l’espace de travail.
+Le dépôt comprend `render.yaml` pour créer un serveur HTTPS hébergé. Déploie-le avec [Render](https://render.com/deploy?repo=https://github.com/maxime-rnd/cetelem-mcp), sélectionne le plan gratuit et saisis `CETELEM_API_KEY` dans le champ secret demandé par Render. La clé est stockée dans les variables du service et n’est pas écrite dans le dépôt.
 
-Ne rendez pas publique la clé API. Pour un serveur partagé, ajoutez une authentification OAuth compatible ChatGPT ou limitez l’accès au niveau de l’hébergeur/proxy. ChatGPT ne prend pas en charge une clé API personnalisée comme authentification MCP directe.
+Après le déploiement, utilise l’URL HTTPS Render terminée par `/mcp` dans **ChatGPT Web → Plugins → + → Add custom MCP server**. Sélectionne **No authentication** et crée le plugin. Le serveur expose uniquement des simulations de prêt ; l’URL du serveur reste toutefois accessible publiquement à toute personne qui la connaît.
+
+L’offre gratuite Render met le service en veille après 15 minutes sans trafic. Le réveil de la première requête prend environ une minute. Passe à une offre payante si tu veux éviter cette attente. Consulte les [limites du plan gratuit Render](https://render.com/docs/free).
+
+Pour un serveur privé, configure OAuth compatible avec ChatGPT ou utilise un Secure MCP Tunnel hébergé dans un environnement cloud. Un tunnel lancé sur ton PC ne répondrait pas au besoin d’accès lorsque ton PC est éteint.
 
 ## Paramètres
 
