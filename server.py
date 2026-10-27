@@ -1,4 +1,4 @@
-"""MCP server for indicative Cetelem France loan simulations."""
+"""MCP server for detailed Cetelem France credit simulations."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 API_KEY = os.getenv("CETELEM_API_KEY", "")
 API_BASE_URL = os.getenv(
@@ -19,22 +19,34 @@ DEFAULT_VENDOR_CODE = os.getenv("CETELEM_VENDOR_CODE", "1001989870")
 DEFAULT_MATERIAL_CODE = os.getenv("CETELEM_MATERIAL_CODE", "330")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
+MCP_TRANSPORT = os.getenv("MCP_TRANSPORT", "streamable-http")
 
-
-class Scenario(BaseModel):
-    amount: float = Field(gt=0, description="Montant emprunté en euros")
-    duration: int = Field(gt=0, description="Durée en mois")
-    irregularDuration1: int = Field(
-        default=0, ge=0,
-        description="Durée irrégulière éventuelle en mois (0 par défaut)",
-    )
-
+MATERIAL_CODES = {
+    "travaux éco-responsables": "115",
+    "décoration": "330",
+    "véhicule essence/diesel/autre neuf": "501",
+    "véhicule essence/diesel/autre occasion": "502",
+    "véhicule électrique neuf": "509",
+    "véhicule électrique occasion": "510",
+    "caravane/camping-car neuf": "520",
+    "caravane/camping-car occasion": "521",
+    "hybride rechargeable neuf": "530",
+    "hybride rechargeable occasion": "531",
+    "vacances et loisirs": "660",
+    "événements de vie": "676",
+    "santé et bien-être": "680",
+    "autres travaux": "919",
+}
 
 mcp = FastMCP(
     "Cetelem Simulation",
     instructions=(
-        "Simule des prêts personnels Cetelem France. Les résultats sont indicatifs, "
-        "et ne constituent ni une offre de crédit ni une décision d’éligibilité."
+        "Les outils disponibles retournent uniquement des offres détaillées "
+        "pour un montant et une durée précis. Ils ne calculent pas de mensualité "
+        "cible et ne recherchent pas de durées possibles. Les résultats sont "
+        "indicatifs et ne constituent ni une offre ferme ni une décision "
+        "d’éligibilité. Utilise simulate_pp_detail pour un prêt personnel et "
+        "simulate_cr_detail pour un crédit renouvelable."
     ),
     host=HOST,
     port=PORT,
@@ -44,33 +56,17 @@ mcp = FastMCP(
 )
 
 
-@mcp.tool()
-async def cetelem_simulate(
-    scenarios: list[Scenario] = Field(
-        min_length=1, max_length=10,
-        description="1 à 10 scénarios montant/durée à comparer.",
-    ),
-    vendor_code: str = Field(
-        default=DEFAULT_VENDOR_CODE,
-        description="Code vendeur Cetelem (1001989870 par défaut).",
-    ),
-    material_code: str = Field(
-        default=DEFAULT_MATERIAL_CODE,
-        description="Code produit Cetelem (330 par défaut).",
-    ),
-) -> dict[str, Any]:
-    """Compare un ou plusieurs scénarios de prêt personnel Cetelem."""
-    if not API_KEY:
-        return {"error": "Configuration manquante : définissez CETELEM_API_KEY sur le serveur."}
+def resolve_material_code(code: str) -> str:
+    if code.isdigit():
+        return code
+    normalized = code.lower().strip()
+    return MATERIAL_CODES.get(normalized, code)
 
-    payload = {
-        "vendorCode": vendor_code,
-        "materialCode": material_code,
-        "simulations": {
-            str(index): scenario.model_dump()
-            for index, scenario in enumerate(scenarios)
-        },
-    }
+
+async def call_cetelem_api(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if not API_KEY:
+        return {"error": "Configuration manquante : définissez CETELEM_API_KEY."}
+
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -89,10 +85,11 @@ async def cetelem_simulate(
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "cross-site",
     }
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{API_BASE_URL}/detail-simulations-pp",
+                f"{API_BASE_URL}/{endpoint}",
                 headers=headers,
                 json=payload,
             )
@@ -103,17 +100,62 @@ async def cetelem_simulate(
         data = response.json()
     except json.JSONDecodeError:
         data = {"rawResponse": response.text[:2000]}
+
     if not response.is_success:
         return {
             "error": f"L’API Cetelem a répondu HTTP {response.status_code}.",
             "details": data,
-            "hint": "Vérifiez les codes vendeur/produit et les paramètres de simulation.",
         }
     return data
 
 
+@mcp.tool()
+async def simulate_pp_detail(
+    amount: float = Field(gt=0, description="Montant exact du prêt personnel en euros"),
+    duration: int = Field(gt=0, description="Durée exacte du prêt en mois"),
+    material_code: str = Field(
+        default=DEFAULT_MATERIAL_CODE,
+        description=(
+            "Code numérique du projet ou nom connu, par exemple 330 ou décoration."
+        ),
+    ),
+    vendor_code: str = Field(
+        default=DEFAULT_VENDOR_CODE,
+        description="Code vendeur Cetelem (1001989870 par défaut).",
+    ),
+) -> dict[str, Any]:
+    """Retourne l’offre détaillée d’un prêt personnel pour un montant et une durée précis."""
+    payload = {
+        "materialCode": resolve_material_code(material_code),
+        "simulations": {
+            "0": {"amount": amount, "duration": duration, "irregularDuration1": 0}
+        },
+        "vendorCode": vendor_code,
+    }
+    return await call_cetelem_api("detail-simulations-pp", payload)
+
+
+@mcp.tool()
+async def simulate_cr_detail(
+    amount: float = Field(
+        gt=0, description="Montant exact du crédit renouvelable en euros"
+    ),
+    duration: int = Field(gt=0, description="Durée exacte du crédit en mois"),
+    vendor_code: str = Field(
+        default=DEFAULT_VENDOR_CODE,
+        description="Code vendeur Cetelem (1001989870 par défaut).",
+    ),
+) -> dict[str, Any]:
+    """Retourne l’offre détaillée d’un crédit renouvelable pour un montant et une durée précis."""
+    payload = {
+        "simulations": {
+            "0": {"amount": amount, "duration": duration, "productType": "EMI"}
+        },
+        "vendorCode": vendor_code,
+    }
+    return await call_cetelem_api("detail-simulation-cr", payload)
+
+
 if __name__ == "__main__":
-    if os.getenv("MCP_TRANSPORT", "streamable-http") == "stdio":
-        mcp.run()
-    else:
-        mcp.run(transport="streamable-http")
+    mcp.run(transport=MCP_TRANSPORT)
+
