@@ -1,6 +1,6 @@
 # Cetelem Simulation MCP (Python)
 
-Serveur MCP Python qui expose l’outil `cetelem_simulate` pour comparer jusqu’à dix simulations de prêt personnel Cetelem France.
+Serveur MCP Python exposant uniquement les outils de simulation détaillée Cetelem France : prêt personnel et crédit renouvelable.
 
 ## Ce que les essais API ont montré
 
@@ -77,6 +77,6 @@ Pour un serveur privé, configure OAuth compatible avec ChatGPT ou utilise un Se
 - `HOST` et `PORT` : écoute HTTP (`0.0.0.0:8000` par défaut).
 - `MCP_TRANSPORT=stdio` : sélectionne STDIO ; par défaut, le transport est Streamable HTTP.
 
-`cetelem_simulate` prend une liste `scenarios` de 1 à 10 objets `{ "amount": 10000, "duration": 72 }`. Chaque objet accepte aussi `irregularDuration1` (0 par défaut). Les champs `vendor_code` et `material_code` sont optionnels.
+Les outils détaillés sont `simulate_pp_detail` (prêt personnel, avec `amount`, `duration` et `material_code`) et `simulate_cr_detail` (crédit renouvelable, avec `amount` et `duration`). Ils retournent les conditions précises calculées par l’API Cetelem. Les endpoints de simulation simple ne sont pas exposés.
 
 Les résultats sont indicatifs, pas une offre de crédit ni une décision d’éligibilité.
